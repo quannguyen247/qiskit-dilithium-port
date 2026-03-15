@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./dilithium-qiskit-port/src"
+    ]
+}
