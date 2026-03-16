@@ -1,31 +1,49 @@
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, transpile
+import qiskit
 from qiskit_aer import AerSimulator
 import sys
 import os
+import time
+import platform
+import subprocess
 
 # Import our verified modules
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Import Configuration
+sys.path.append(os.path.dirname(__file__)) # Add current dir
+import parameters 
+
 from arithmetic.modular_17 import Modular17
 from arithmetic.ntt import QuantumNTT
 
 class MiniDilithium:
     """
     A Toy implementation of Dilithium logic using Quantum Arithmetic.
-    Parameters: N=2, q=17 (Micro Spec for fast Simulation)
+    Configurable via parameters.py
     """
-    def __init__(self):
-        self.n = 2
-        self.q = 17
-        self.omega = 16 # Cyclic root (order 2)
-        self.psi = 4   # Negacyclic root (psi^2 = 16 = -1)
+    def __init__(self, config=None):
+        # Load Config
+        if config is None:
+            config = parameters.CURRENT_CONFIG
+            
+        self.config = config
+        self.n = config.N
+        self.q = config.q
+        self.omega = config.omega
+        self.psi = config.psi
         
         self.backend = Modular17()
-        self.simulator = AerSimulator(method='statevector')
+        # Initialize Backend based on Config
+        if config.backend_method == 'statevector':
+            self.simulator = AerSimulator(method='statevector')
+        else:
+            self.simulator = AerSimulator(method=config.backend_method, shots=config.shots)
+            
         self.ntt_engine = QuantumNTT(self.backend, self.n, self.q, self.omega)
         
-        print(f"initialized Mini-Dilithium (N={self.n}, q={self.q})")
-        print("Backend: Qiskit Aer Statevector Simulator")
+        print(f"initialized: {config.name}")
+        print(f"Backend: {config.backend_name} [{config.backend_method}]")
 
     def classical_dft(self, vec):
         """Standard NTT for the public vector B (simulating classical part)"""
@@ -139,10 +157,54 @@ class MiniDilithium:
         """Multiply polynomial by scalar mod q"""
         return [(c * scalar) % self.q for c in poly]
 
-    def run_full_protocol(self):
-        print("\n=== STAGE 6: FULL PROTOCOL SIMULATION (Mini-Dilithium) ===")
-        print(f"Parameters: N={self.n}, q={self.q}")
+    def print_specs(self, t_keygen, t_sign, t_verify):
+        total_t = t_keygen + t_sign + t_verify
+        cpu_name = parameters.get_cpu_info()
         
+        print("\n" + "="*60)
+        print("          SYSTEM & SIMULATION SPECIFICATIONS")
+        print("="*60)
+        print(f"Host OS:        {platform.system()} {platform.release()} ({platform.machine()})")
+        print(f"Processor:      {cpu_name}")
+        print(f"Python Version: {sys.version.split()[0]}")
+        try:
+            print(f"Qiskit Core:    {qiskit.__version__}")
+        except: pass
+        try:
+            import qiskit_aer
+            print(f"Qiskit Aer:     {qiskit_aer.__version__}")
+        except ImportError:
+            pass
+
+        print("-" * 60)
+        print("SIMULATION CONTEXT:")
+        print(f"  - Config Name:       {self.config.name}")
+        print(f"  - Parameter Set:     N={self.config.N}, q={self.config.q}")
+        print(f"  - Roots Of Unity:    Omega={self.config.omega}, Psi={self.config.psi}")
+        print(f"  - Simulator Backend: {self.config.backend_name} [{self.config.backend_method}]")
+        
+        # Approx active qubits: N * k bits + Aux
+        active_qubits = self.config.N * self.config.k_bits + 3 
+        print(f"  - Active Qubits:     ~{active_qubits} (per convolution op)")
+        import math
+        depth = f"~O({self.config.k_bits} * log {self.config.N})"
+        print(f"  - Circuit Depth:     {depth}")
+
+        print("-" * 60)
+        print("PERFORMANCE TIMING (Single Thread):")
+        print(f"  - [Stage 1] KeyGen:  {t_keygen:.4f} sec")
+        print(f"  - [Stage 2] Sign:    {t_sign:.4f} sec")
+        print(f"  - [Stage 3] Verify:  {t_verify:.4f} sec")
+        print(f"  ------------------------------")
+        print(f"  - TOTAL EXECUTION:   {total_t:.4f} sec")
+        print("="*60 + "\n")
+
+    def run_full_protocol(self):
+        print("\n=== STAGE 6: FULL PROTOCOL SIMULATION ===")
+        print(f"Config: {self.config.name}")
+        
+        t0 = time.time()
+
         # --- 1. KEYGEN ---
         print("\n[1] KeyGen: Generating Keys...")
         # Secret vectors s1, s2
@@ -175,7 +237,9 @@ class MiniDilithium:
             print(">>> KEYGEN SUCCESSFUL")
         else:
             print(">>> KEYGEN FAILED (Value mismatch)")
-        
+            
+        t1 = time.time()
+        keygen_dur = t1 - t0
         
         # --- 2. SIGN ---
         print("\n[2] Sign: Creating Signature...")
@@ -219,6 +283,8 @@ class MiniDilithium:
         if z1 == [2, 2] and z2 == [3, 2]:
              print(">>> SIGNATURE GENERATION SUCCESSFUL")
         
+        t2 = time.time()
+        sign_dur = t2 - t1
         
         # --- 3. VERIFY ---
         print("\n[3] Verify: Checking Signature...")
@@ -252,7 +318,20 @@ class MiniDilithium:
             print("\n>>> VERIFICATION SUCCESSFUL: Signature is valid!")
         else:
             print("\n>>> VERIFICATION FAILED: Signature invalid.")
+            
+        t3 = time.time()
+        verify_dur = t3 - t2
+        
+        # --- REPORT ---
+        self.print_specs(keygen_dur, sign_dur, verify_dur)
 
 if __name__ == "__main__":
-    demo = MiniDilithium()
+    # You can switch configuration here:
+    # config = parameters.DilithiumConfig.Mini() # For N=4 (Slow!)
+    # config = parameters.DilithiumConfig.Micro() # For N=2 (Fast)
+    
+    # Use the default from parameters.py
+    config = parameters.CURRENT_CONFIG
+    
+    demo = MiniDilithium(config)
     demo.run_full_protocol()
