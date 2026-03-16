@@ -113,4 +113,3 @@ class Modular5(ModularBackend):
     def sub_mod_from(self, qc, target, source, aux):
          """Redirect to sub_mod for now, assumes consistent interface"""
          self.sub_mod(qc, target, source, aux)
-

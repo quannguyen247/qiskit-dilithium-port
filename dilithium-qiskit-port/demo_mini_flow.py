@@ -96,7 +96,20 @@ class MiniDilithium:
     def quantum_poly_mul(self, poly_a, poly_b_hat_classical, name="mul"):
         """Computes A * B using QuantumNTT."""
         regs = [QuantumRegister(5, f"r{i}") for i in range(self.n)]
-        qc = QuantumCircuit(*regs)
+        
+        # --- Handle Fixed/Custom Qubit Allocation ---
+        if not self.config.use_auto_qubits:
+            current_qubits = self.n * 5
+            target = self.config.custom_qubit_count
+            padding = target - current_qubits
+            if padding > 0:
+                pad_reg = QuantumRegister(padding, "pad")
+                qc = QuantumCircuit(*regs, pad_reg)
+                # Pad qubits remain |0> (idle), just consuming simulator memory
+            else:
+                 qc = QuantumCircuit(*regs) # Target lower than minimum
+        else:
+            qc = QuantumCircuit(*regs)
 
         # 1. Encode Poly A
         for i, val in enumerate(poly_a):
@@ -130,7 +143,8 @@ class MiniDilithium:
         qc.save_statevector()
         
         # Run
-        t_qc = transpile(qc, self.simulator)
+        # optimization_level=0: Skip slow circuit optimization (critical for large circuits)
+        t_qc = transpile(qc, self.simulator, optimization_level=0)
         job = self.simulator.run(t_qc)
         sv = np.asarray(job.result().get_statevector())
         
@@ -207,13 +221,20 @@ class MiniDilithium:
 
         # --- 1. KEYGEN ---
         print("\n[1] KeyGen: Generating Keys...")
-        # Secret vectors s1, s2
-        s1 = [1, 2]
-        s2 = [3, 1]
+        # Generate random polys for s1, s2
+        # For determinism in demo, we can seed or use fixed pattern
+        import random
+        random.seed(42) # Deterministic for demo
+        
+        def random_poly(n, bound):
+            return [random.randint(0, bound-1) for _ in range(n)]
+            
+        s1 = random_poly(self.n, 5) # Small coeffs
+        s2 = random_poly(self.n, 5)
         print(f"  Secret s (s1, s2): {s1}, {s2}")
         
         # Public Matrix A (1x2 for simplicity: [p1, p2])
-        A_row = [[2, 0], [1, 1]]
+        A_row = [random_poly(self.n, self.q), random_poly(self.n, self.q)]
         print(f"  Public A (p1, p2): {A_row[0]}, {A_row[1]}")
         
         # t = A * s = p1*s1 + p2*s2
@@ -222,21 +243,16 @@ class MiniDilithium:
         A_hat = [self.classical_dft(p) for p in A_row]
         
         # Validating Quantum Multiplication
-        t_part1 = self.quantum_poly_mul(s1, A_hat[0]) # s1 * p1
+        t_part1 = self.quantum_poly_mul(s1, A_hat[0], "s1*p1") # s1 * p1
         self.verify_mul_step(s1, A_hat[0], t_part1, "s1*p1")
         
-        t_part2 = self.quantum_poly_mul(s2, A_hat[1]) # s2 * p2
+        t_part2 = self.quantum_poly_mul(s2, A_hat[1], "s2*p2") # s2 * p2
         self.verify_mul_step(s2, A_hat[1], t_part2, "s2*p2")
         
         t = self.classical_add(t_part1, t_part2)
         print(f"  Public Key t: {t}")
         
-        # Compute Expected classical t
-        # (Assuming quantum mul passed, add is simple, so t is good. But let's check t itself is sane)
-        if t == [4, 8]: # Known correct value for this fixed input
-            print(">>> KEYGEN SUCCESSFUL")
-        else:
-            print(">>> KEYGEN FAILED (Value mismatch)")
+        print(">>> KEYGEN COMPLETE")
             
         t1 = time.time()
         keygen_dur = t1 - t0
@@ -244,29 +260,25 @@ class MiniDilithium:
         # --- 2. SIGN ---
         print("\n[2] Sign: Creating Signature...")
         # Sample ephemeral vector y
-        y1 = [1, 0]
-        y2 = [0, 1]
+        y1 = random_poly(self.n, 3)
+        y2 = random_poly(self.n, 3)
         print(f"  Sampled y (y1, y2): {y1}, {y2}")
         
         # Compute w = A * y
         print("  Computing w = A*y on Quantum Hardware...")
-        w_part1 = self.quantum_poly_mul(y1, A_hat[0])
+        w_part1 = self.quantum_poly_mul(y1, A_hat[0], "y1*p1")
         self.verify_mul_step(y1, A_hat[0], w_part1, "y1*p1")
         
-        w_part2 = self.quantum_poly_mul(y2, A_hat[1])
+        w_part2 = self.quantum_poly_mul(y2, A_hat[1], "y2*p2")
         self.verify_mul_step(y2, A_hat[1], w_part2, "y2*p2")
         
         w = self.classical_add(w_part1, w_part2)
         print(f"  Commitment w: {w}")
-        
-        # Verify w calculation
-        if w == [1, 1]: # Known correct for inputs
-             print(">>> COMMITMENT (w) GENERATION SUCCESSFUL")
-        else:
-             print(">>> COMMITMENT FAILED")
+        print(">>> COMMITMENT (w) GENERATION COMPLETE")
 
         # Create Challenge c (Simplified: random scalar polynomial)
-        c = [1, 0] # Polynomial c(x) = 1
+        c = [0] * self.n
+        c[0] = 1 # Polynomial c(x) = 1
         print(f"  Challenge c: {c}")
         
         # Compute z = y + c*s (Classically)
@@ -277,11 +289,7 @@ class MiniDilithium:
         z2 = self.classical_add(y2, s2)
         print(f"  Signature z (z1, z2): {z1}, {z2}")
         print(f"  Signature sent: (z, c)")
-        
-        # We assume Sign phase is pure classical mixing after w is found.
-        # But we verify z is consistent
-        if z1 == [2, 2] and z2 == [3, 2]:
-             print(">>> SIGNATURE GENERATION SUCCESSFUL")
+        print(">>> SIGNATURE GENERATION COMPLETE")
         
         t2 = time.time()
         sign_dur = t2 - t1
@@ -295,10 +303,10 @@ class MiniDilithium:
         
         # 3.1 Compute A*z (Quantumly!)
         print("  Computing A*z on Quantum Hardware...")
-        Az_part1 = self.quantum_poly_mul(z1, A_hat[0])
+        Az_part1 = self.quantum_poly_mul(z1, A_hat[0], "z1*p1")
         self.verify_mul_step(z1, A_hat[0], Az_part1, "z1*p1")
 
-        Az_part2 = self.quantum_poly_mul(z2, A_hat[1])
+        Az_part2 = self.quantum_poly_mul(z2, A_hat[1], "z2*p2")
         self.verify_mul_step(z2, A_hat[1], Az_part2, "z2*p2")
 
         Az = self.classical_add(Az_part1, Az_part2)
@@ -333,5 +341,15 @@ if __name__ == "__main__":
     # Use the default from parameters.py
     config = parameters.CURRENT_CONFIG
     
+    # Optional: Override shots for noisy backends if needed
+    # config.shots = 2048 
+
+    # DISCLAIMER
+    if config.N < 256:
+        print("\n[NOTE] Running 'Toy' or 'Mini' Dilithium variant.")
+        print("       These parameters are for algorithmic verification only.")
+        print("       They do NOT provide cryptographic security (easy to break).")
+        print("       Standard Dilithium requires N=256, q=8380417.")
+
     demo = MiniDilithium(config)
     demo.run_full_protocol()

@@ -23,8 +23,8 @@ class DilithiumConfig:
         # --- Mathematical Parameters ---
         # N: The number of coefficients in our polynomial. 
         # Example: N=2 means polynomials look like a + bx.
-        # This parameter directly impacts simulation speed (exponentially).
-        self.N = 2  
+        # This parameter directly impacts simulation speed (exponentially). 
+        # Increasing N increases qubit usage linearly: Qubits ~ k * N + C 
         
         # q: The modulus for coefficients. All math is done modulo q.
         # We use q=17 because it fits in 5 qubits and supports standard NTT.
@@ -50,9 +50,9 @@ class DilithiumConfig:
         self.backend_name = 'aer_simulator'
         
         # backend_method: The simulation technique.
-        # 'statevector' computes the exact quantum state vector (2^n complex numbers).
-        # This is very fast for small N (N<=4) but memory intensive for large N.
-        self.backend_method = 'statevector' 
+        # 'statevector': Exact, fast for small N (N<=2), consumes RAM exponentially.
+        # 'matrix_product_state': Better for larger N (N>=4), manages entanglement efficiently.
+        self.backend_method = 'matrix_product_state' 
         
         # shots: Number of times to run the circuit if not using statevector mode.
         # More shots = better statistical accuracy but slower execution.
@@ -66,6 +66,18 @@ class DilithiumConfig:
         # matrix_L: The width of the matrix A in the public key.
         # Increasing L also increases security and signature size.
         self.matrix_L = 2
+        
+        # =================================================================
+        # [USER CONFIG]: SIMULATOR QUBIT SETTINGS
+        # =================================================================
+        # 1 = AUTO (Automatically use the minimal required qubits, e.g. 13 or 23)
+        # 0 = CUSTOM (Force a fixed total qubit count for load-testing)
+        self.use_auto_qubits = 1
+        
+        # [CUSTOMIZE HERE]: Target total qubit count when use_auto_qubits = 0
+        # Example: set to 30 to force simulation with 30 qubits
+        self.custom_qubit_count = 23
+        # =================================================================
         
     def estimate_qubits(self):
         """Estimate active qubits for one polynomial convolution op"""
@@ -125,6 +137,23 @@ class DilithiumConfig:
         cfg.k_bits = 5
         return cfg
 
+    @classmethod
+    def Standard_Dilithium2(cls):
+        """
+        STANDARD DILITHIUM-2 (Reference Configuration - DO NOT RUN)
+        N=256, q=8380417, ~6,000 Qubits.
+        Impossible to simulate on classical hardware.
+        """
+        cfg = cls("Standard Dilithium-2")
+        cfg.N = 256
+        cfg.q = 8380417
+        cfg.omega = 1753 
+        cfg.psi = 0 # Not calculated
+        cfg.k_bits = 23 # 23 bits per coeff
+        cfg.matrix_K = 4
+        cfg.matrix_L = 4
+        return cfg
+
     def __str__(self):
         # Format a readable string description of the current config
         return (f"Configuration: {self.name}\n"
@@ -136,28 +165,43 @@ class DilithiumConfig:
 
 # --- GLOBAL CONFIGURATION INSTANCE ---
 # This variable controls the settings for the entire project.
-# To switch to N=4 mode, change .Micro() to .Mini() below.
-CURRENT_CONFIG = DilithiumConfig.Micro()
+# To switch configuration, commented/uncomment the lines below:
+
+# OPTION 1: TOY DILITHIUM (Fast, Recommended for Simulator)
+CURRENT_CONFIG = DilithiumConfig.Mini()
+
+# OPTION 2: MINI DILITHIUM (Slow, only for powerful machines)
+# CURRENT_CONFIG = DilithiumConfig.Mini()
+
+# OPTION 3: STANDARD DILITHIUM (Reference Only - DO NOT RUN)
+# CURRENT_CONFIG = DilithiumConfig.Standard_Dilithium2()
 
 
 def get_cpu_info():
     """
     Robust CPU Info Retrieval (Cross-Platform).
-    Attempts to get the CPU model name using OS-specific commands.
     """
     try:
-        # Check if running on Windows
+        # 1. Windows Registry (Most reliable for commercial name)
         if platform.system() == "Windows":
-            # Execute wmic command to get CPU name
-            cmd = "wmic cpu get name"
-            # Suppress stderr (e.g., if wmic is missing or permission denied)
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL)
-            # Parse output lines
-            lines = output.decode().strip().split('\n')
-            if len(lines) > 1:
-                return lines[1].strip()
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+            model = winreg.QueryValueEx(key, "ProcessorNameString")[0]
+            return model.strip()
     except Exception:
-        pass # Fail gracefully if command fails
+        pass
         
-    # Fallback to standard python platform info
+    try:
+        # 2. Linux / macOS (sysctl or /proc/cpuinfo)
+        if platform.system() == "Linux":
+             with open("/proc/cpuinfo", "r") as f:
+                 for line in f:
+                     if "model name" in line:
+                         return line.split(":")[1].strip()
+        elif platform.system() == "Darwin":
+            return subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"]).decode().strip()
+    except Exception:
+        pass
+        
+    # 3. Fallback
     return platform.processor() or "Unknown Processor"

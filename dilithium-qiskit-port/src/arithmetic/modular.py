@@ -214,5 +214,3 @@ class ModularArithmetic:
         qc.ccx(reg_b[0], reg_a[0], reg_aux[0])
         qc.x(reg_b[0])
         
-        # Done. aux is fully clean.
-
