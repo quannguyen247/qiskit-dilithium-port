@@ -106,8 +106,18 @@ class MiniDilithium:
                 pad_reg = QuantumRegister(padding, "pad")
                 qc = QuantumCircuit(*regs, pad_reg)
                 # Pad qubits remain |0> (idle), just consuming simulator memory
+            elif padding < 0:
+                 # WARNING: target < current_qubits
+                 # Cannot simulate fewer qubits than logic requires.
+                 # Fallback to minimum required with a warning on first run.
+                 if not hasattr(self, "_warned_qubit_override"):
+                     print(f"\n[WARNING] Custom Qubits ({target}) < Minimum Required ({current_qubits}).")
+                     print(f"          Overriding to minimum: {current_qubits} qubits.")
+                     self._warned_qubit_override = True
+                 qc = QuantumCircuit(*regs) 
             else:
-                 qc = QuantumCircuit(*regs) # Target lower than minimum
+                 # Exact match, proceed normally
+                 qc = QuantumCircuit(*regs) 
         else:
             qc = QuantumCircuit(*regs)
 

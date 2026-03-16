@@ -72,11 +72,11 @@ class DilithiumConfig:
         # =================================================================
         # 1 = AUTO (Automatically use the minimal required qubits, e.g. 13 or 23)
         # 0 = CUSTOM (Force a fixed total qubit count for load-testing)
-        self.use_auto_qubits = 1
+        self.use_auto_qubits = 0
         
         # [CUSTOMIZE HERE]: Target total qubit count when use_auto_qubits = 0
         # Example: set to 30 to force simulation with 30 qubits
-        self.custom_qubit_count = 23
+        self.custom_qubit_count = 10
         # =================================================================
         
     def estimate_qubits(self):
@@ -168,7 +168,7 @@ class DilithiumConfig:
 # To switch configuration, commented/uncomment the lines below:
 
 # OPTION 1: TOY DILITHIUM (Fast, Recommended for Simulator)
-CURRENT_CONFIG = DilithiumConfig.Mini()
+CURRENT_CONFIG = DilithiumConfig.Micro()
 
 # OPTION 2: MINI DILITHIUM (Slow, only for powerful machines)
 # CURRENT_CONFIG = DilithiumConfig.Mini()
