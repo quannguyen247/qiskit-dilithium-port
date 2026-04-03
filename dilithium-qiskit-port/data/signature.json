@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "protocol": "quantum-dilithium-auth",
+  "type": "signature",
+  "client": "board_client",
+  "timestamp": 1775208346,
+  "signature": {
+    "challenge_id": "ch_1775208345",
+    "z": [
+      0,
+      1
+    ],
+    "message": "Signed challenge for quantum Dilithium authentication"
+  }
+}

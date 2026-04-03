@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "protocol": "quantum-dilithium-auth",
+  "type": "verification_result",
+  "server": "server",
+  "timestamp": 1775208348,
+  "result": {
+    "valid": true,
+    "reason": "Signature verified successfully via Quantum Arithmetic",
+    "verification_details": {
+      "Az_computed": [
+        13,
+        7
+      ],
+      "ct_computed": [
+        0,
+        0
+      ],
+      "sender": "board_client",
+      "challenge_id": "ch_1775208345",
+      "quantum_backend": "aer_simulator",
+      "quantum_method": "matrix_product_state"
+    }
+  },
+  "metrics": {
+    "execution_time_microseconds": 2853464.599975586,
+    "execution_time_milliseconds": 2853.4645999755858,
+    "backend": "aer_simulator",
+    "method": "matrix_product_state",
+    "config_name": "Micro (N=2)",
+    "n_qubits_active": 13
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "protocol": "quantum-dilithium-auth",
+  "type": "challenge",
+  "server": "server",
+  "timestamp": 1775208345,
+  "challenge": {
+    "challenge_id": "ch_1775208345",
+    "c": [
+      0,
+      1
+    ]
+  },
+  "instructions": {
+    "action": "Sign this challenge",
+    "compute": "z = y + c*s",
+    "return": "signature.json with z"
+  }
+}

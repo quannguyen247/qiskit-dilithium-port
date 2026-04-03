@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "protocol": "quantum-dilithium-auth",
+  "type": "publickey",
+  "sender": "board_client",
+  "timestamp": 1775208338,
+  "public_key": {
+    "A": [
+      [
+        7,
+        4
+      ],
+      [
+        3,
+        2
+      ]
+    ],
+    "t": [
+      13,
+      1
+    ]
+  },
+  "metadata": {
+    "N": 2,
+    "q": 17,
+    "source": "Board Client (alice_client simulation)"
+  }
+}
